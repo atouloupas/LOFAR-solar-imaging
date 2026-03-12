@@ -21,13 +21,13 @@ MS_FILES_CPY=$(ls -d ${DATA_FOLDER}/*.CPY)
 
 for MS_FILE in $MS_FILES_CPY; do
     if [[ -e "$MS_FILE" ]]; then
-        # 2. UPDATE COLUMNS
+        # Update columns
         taql update $MS_FILE set FLAG_ROW=false
         taql update $MS_FILE set WEIGHT_SPECTRUM=1
         taql update $MS_FILE set FLAG=false
         taql update $MS_FILE set FLAG=true where ANTENNA1=ANTENNA2
 
-        # 3. AVERAGE
+        # 2. AVERAGE
         echo "Running averager step..."
         DP3 msin=$MS_FILE \
             steps=["averager"] \
@@ -37,12 +37,12 @@ for MS_FILE in $MS_FILES_CPY; do
     fi
 done
 
-# 4. MERGE the averaged Sun files
+# 3. MERGE the averaged Sun files
 DP3 msin=[$DATA_FOLDER/L883050_SAP000*.AVG] \
     steps=[] \
     msout="${ANT}_joined_sun_${DATE}.MS"
 
-# 4. MERGE the averaged Cas A files
+# 3. MERGE the averaged Cas A files
 DP3 msin=[$DATA_FOLDER/*SAP001*.AVG] \
     steps=[] \
     msout="${ANT}_joined_cas_${DATE}.MS"
