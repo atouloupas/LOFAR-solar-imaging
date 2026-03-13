@@ -1,132 +1,134 @@
 #!/bin/bash
+set -euo pipefail
 
-# Set number of threads
-export OPENBLAS_NUM_THREADS=1
+export OPENBLAS_NUM_THREADS="${OPENBLAS_NUM_THREADS:-1}"
 
-# Define the antenna and date
-ANT="HBA"
-DATE="20230311"
+usage() {
+  cat <<USAGE
+Usage: $0 --cal-ms <file> --sun-ms <file> [options]
 
-# Define the folder containing the MS files and the source database
+Options:
+  --cal-ms <file>        Calibrator measurement set.
+  --sun-ms <file>        Sun (target) measurement set.
+  --source-db <file>     Sky model database (default: Cas-sources.txt).
+  --solutions-dir <dir>  Output directory for solutions (default: ./solutions).
+  --skip-predict         Skip predict step.
+  --skip-gaincal         Skip gain calibration step.
+  --skip-apply           Skip applycal step.
+  -h, --help             Show this help.
+USAGE
+}
+
+CAL_FILE=""
+SUN_FILE=""
 SOURCE_DB="Cas-sources.txt"
-SOLUTIONS_FOLDER="./solutions_${ANT}"
-mkdir -p $SOLUTIONS_FOLDER
+SOLUTIONS_DIR="./solutions"
+SKIP_PREDICT=0
+SKIP_GAINCAL=0
+SKIP_APPLY=0
 
-# Check if the source database file exists
-if [[ ! -f "$SOURCE_DB" ]]; then
-    echo "Source database file '$SOURCE_DB' not found. Exiting."
-    exit 1
-fi
-
-# CAL_FILE="${ANT}_joined_cas_${DATE}.MS"
-# SUN_FILE="${ANT}_joined_sun_${DATE}.MS"
-CAL_FILE="${ANT}_files/${DATE}/L883062_SAP000_SB190_uv.MS.CPY.AVG"
-SUN_FILE="${ANT}_files/${DATE}/L883060_SAP000_SB190_uv.MS.CPY.AVG"
-# Extract the filename without the path and extension for creating parmdb file
-BASE_NAME="${SUN_FILE##*/}"
-BASE_NAME="${BASE_NAME%%.*}"
-PARMDB_FILE="solutions_${BASE_NAME}.h5"
-
-# List of tables
-tables=("$CAL_FILE" "$SUN_FILE")
-
-# Loop over each table and apply TAQL commands
-for table in "${tables[@]}"; do
-    taql "update $table set FLAG_ROW=false"
-    taql "update $table set WEIGHT_SPECTRUM=1"
-    taql "update $table set FLAG=false"
-    taql "update $table set FLAG=true where ANTENNA1=ANTENNA2"
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --cal-ms) CAL_FILE="$2"; shift 2 ;;
+    --sun-ms) SUN_FILE="$2"; shift 2 ;;
+    --source-db) SOURCE_DB="$2"; shift 2 ;;
+    --solutions-dir) SOLUTIONS_DIR="$2"; shift 2 ;;
+    --skip-predict) SKIP_PREDICT=1; shift ;;
+    --skip-gaincal) SKIP_GAINCAL=1; shift ;;
+    --skip-apply) SKIP_APPLY=1; shift ;;
+    -h|--help) usage; exit 0 ;;
+    *) echo "Unknown option: $1"; usage; exit 1 ;;
+  esac
 done
 
-# Check if the file exists (to handle cases where the glob finds no matches)
-if [[ -e "$CAL_FILE" ]]; then
-    echo "Processing file: $CAL_FILE"
-
-    # Step 1: Predict
-    echo "Running predict step..."
-    DP3 steps=["predict"] \
-        msin="$CAL_FILE"/ \
-        msout=. \
-        msout.datacolumn=MODEL_DATA \
-        predict.sourcedb="$SOURCE_DB" \
-        predict.usebeammodel=true
-
-    if [[ $? -eq 0 ]]; then
-        echo "Predict step successful for: $CAL_FILE"
-    else
-        echo "Predict step failed for: $CAL_FILE"
-        break
-    fi
-
-    
-    # Produce and read outlier station list
-    python3 station_outliers.py $SUN_FILE
-    mapfile -t stations < stations/stations_${BASE_NAME}.txt
-
-    # Build baseline flag list
-    baseline_flags=""
-    for station in "${stations[@]}"; do
-        baseline_flags+="[$station,*],[*,$station],"
-    done
-    baseline_flags="${baseline_flags%,}"
-
-    # Step 2: Gain Calibration
-    # flag_times.timeofday=[13:13:00..13:15:25]
-    echo "Running gaincal step..."
-    DP3 steps=[preflagger,flag_times,gaincal] \
-        preflagger.baseline=[$baseline_flags,[RS*,RS*]] \
-        flag_times.type=preflagger \
-        flag_times.timeofday=[] \
-        gaincal.caltype=diagonal \
-        gaincal.onebeamperpatch=true \
-        gaincal.parmdb="$SOLUTIONS_FOLDER/$PARMDB_FILE" \
-        msin="$CAL_FILE"/ \
-        gaincal.sourcedb="$SOURCE_DB" \
-        msout=. \
-        msout.datacolumn=CALIBRATED_DATA \
-        gaincal.applysolution=true \
-        gaincal.usebeammodel=true \
-        gaincal.uvlambdamin=120
-
-    if [[ $? -eq 0 ]]; then
-        echo "Gaincal step successful for: $CAL_FILE"
-    else
-        echo "Gaincal step failed for: $CAL_FILE"
-    fi
-
-
-    # Step 3: Applying the Solution
-    echo "Applying solution..."
-    python3 interpolate_solutions.py "$SOLUTIONS_FOLDER/$PARMDB_FILE" --interpolate --save
-
-    DP3 steps=[applyphase,applyamp,applybeam] \
-        applybeam.updateweights=true \
-        applyphase.type=applycal \
-        applyphase.interpolation=nearest \
-        applyphase.updateweights=true \
-        applyphase.parmdb="$SOLUTIONS_FOLDER/$PARMDB_FILE" \
-        applyphase.correction=phase000 \
-        applyphase.soltab=sol000 \
-        \
-        applyamp.type=applycal \
-        applyamp.interpolation=nearest \
-        applyamp.updateweights=true \
-        applyamp.parmdb="$SOLUTIONS_FOLDER/$PARMDB_FILE" \
-        applyamp.correction=amplitude000 \
-        applyamp.soltab=sol000 \
-        \
-        msin="$SUN_FILE" \
-        msout=. \
-        msout.datacolumn=CALIBRATED_DATA
-
-    if [[ $? -eq 0 ]]; then
-        echo "Applying solution step successful for: $SUN_FILE"
-    else
-        echo "Applying solution step failed for: $SUN_FILE"
-    fi
-
-else
-    echo "No matching files found."
+if [[ -z "$CAL_FILE" || -z "$SUN_FILE" ]]; then
+  echo "Error: --cal-ms and --sun-ms are required"
+  usage
+  exit 1
 fi
 
-echo "Calibration process completed."
+if [[ ! -f "$SOURCE_DB" ]]; then
+  echo "Source database '$SOURCE_DB' not found"
+  exit 1
+fi
+
+mkdir -p "$SOLUTIONS_DIR"
+BASE_NAME="$(basename "$SUN_FILE")"
+BASE_NAME="${BASE_NAME%%.*}"
+PARMDB_FILE="$SOLUTIONS_DIR/solutions_${BASE_NAME}.h5"
+
+for table in "$CAL_FILE" "$SUN_FILE"; do
+  taql "update $table set FLAG_ROW=false"
+  taql "update $table set WEIGHT_SPECTRUM=1"
+  taql "update $table set FLAG=false"
+  taql "update $table set FLAG=true where ANTENNA1=ANTENNA2"
+done
+
+if [[ $SKIP_PREDICT -eq 0 ]]; then
+  echo "Running predict on $CAL_FILE"
+  DP3 steps=[predict] \
+    msin="$CAL_FILE" \
+    msout=. \
+    msout.datacolumn=MODEL_DATA \
+    predict.sourcedb="$SOURCE_DB" \
+    predict.usebeammodel=true
+fi
+
+if [[ $SKIP_GAINCAL -eq 0 ]]; then
+  echo "Detecting outlier stations from $SUN_FILE"
+  python3 station_outliers.py "$SUN_FILE"
+  mapfile -t stations < "stations/stations_${BASE_NAME}.txt"
+
+  baseline_flags=""
+  for station in "${stations[@]}"; do
+    baseline_flags+="[$station,*],[*,$station],"
+  done
+  baseline_flags="${baseline_flags%,}"
+
+  if [[ -n "$baseline_flags" ]]; then
+    preflag_baseline="[$baseline_flags,[RS*,RS*]]"
+  else
+    preflag_baseline="[[RS*,RS*]]"
+  fi
+
+  echo "Running gain calibration"
+  DP3 steps=[preflagger,gaincal] \
+    preflagger.baseline="$preflag_baseline" \
+    gaincal.caltype=diagonal \
+    gaincal.onebeamperpatch=true \
+    gaincal.parmdb="$PARMDB_FILE" \
+    gaincal.sourcedb="$SOURCE_DB" \
+    gaincal.applysolution=true \
+    gaincal.usebeammodel=true \
+    gaincal.uvlambdamin=120 \
+    msin="$CAL_FILE" \
+    msout=. \
+    msout.datacolumn=CALIBRATED_DATA
+fi
+
+if [[ $SKIP_APPLY -eq 0 ]]; then
+  if [[ -f interpolate_solutions.py ]]; then
+    python3 interpolate_solutions.py "$PARMDB_FILE" --interpolate --save
+  fi
+
+  echo "Applying calibration solutions to $SUN_FILE"
+  DP3 steps=[applyphase,applyamp,applybeam] \
+    applybeam.updateweights=true \
+    applyphase.type=applycal \
+    applyphase.interpolation=nearest \
+    applyphase.updateweights=true \
+    applyphase.parmdb="$PARMDB_FILE" \
+    applyphase.correction=phase000 \
+    applyphase.soltab=sol000 \
+    applyamp.type=applycal \
+    applyamp.interpolation=nearest \
+    applyamp.updateweights=true \
+    applyamp.parmdb="$PARMDB_FILE" \
+    applyamp.correction=amplitude000 \
+    applyamp.soltab=sol000 \
+    msin="$SUN_FILE" \
+    msout=. \
+    msout.datacolumn=CALIBRATED_DATA
+fi
+
+echo "Calibration pipeline completed."
