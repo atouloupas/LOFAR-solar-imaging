@@ -1,0 +1,11 @@
+paths:
+  raw: data/raw
+  intermediate: data/intermediate
+  products: data/products
+
+imaging:
+  fov_arcsec: 3000
+
+qc:
+  std_thresh: 2.0
+  outlier_station_file: data/products/stations/outliers.txt
