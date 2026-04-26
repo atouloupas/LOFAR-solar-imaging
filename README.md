@@ -22,13 +22,13 @@ LOFAR-solar-imaging/
 
 ## Pipeline entrypoints
 
-The current shell pipeline is preserved under `scripts/legacy/`.
-Use one of the wrapper entrypoints from the repo root:
+The pipeline now runs through a Python entrypoint (`lofar_solar_imaging.stages.pipeline`) and keeps shell wrappers for convenience:
 
 - `./pipeline.sh`
 - `./scripts/run_pipeline.sh`
+- `python3 -m lofar_solar_imaging.stages.pipeline`
 
-Both forward to `scripts/legacy/pipeline.sh`.
+Legacy shell implementations remain under `scripts/legacy/` for reference and fallback.
 
 ## Unified pipeline
 
