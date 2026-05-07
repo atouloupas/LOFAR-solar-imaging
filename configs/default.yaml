@@ -1,0 +1,8 @@
+# Default pipeline options
+sun_sap: "000"
+cal_sap: "001"
+intervals_out: 15
+image_type: calibrated
+source_db: Cas-sources.txt
+solutions_dir: outputs/solutions
+output_dir: outputs/images_fits
