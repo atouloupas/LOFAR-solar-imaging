@@ -1,6 +1,40 @@
-# LOFAR-solar-imaging
+# LOFAR Solar Imaging
 
-Data analysis and imaging of LOFAR solar data.
+LOFAR Solar Imaging is a processing pipeline for turning LOFAR solar radio observations into calibrated and imaged data.
+
+The repository provides tools for:
+
+- preparing LOFAR Measurement Sets,
+- averaging and merging data with DP3,
+- calibrating solar observations using calibrator solutions,
+- running WSClean imaging,
+- producing FITS and plot outputs,
+- keeping the full workflow reproducible through a single pipeline entrypoint.
+
+The project is intended for LOFAR solar data analysis where raw Measurement Sets are processed through averaging, calibration, imaging, and post-processing stages.
+
+---
+
+## Project overview
+
+The pipeline is organized into three main processing stages:
+
+1. **Averaging**
+
+   Copies, averages, and merges LOFAR Measurement Sets using DP3.
+
+2. **Calibration**
+
+   Runs prediction, gain calibration, solution filtering, and solution application steps.
+
+3. **Imaging**
+
+   Runs WSClean and post-imaging utilities to create solar image products.
+
+The current orchestration is handled in Python through:
+
+```bash
+python3 -m lofar_solar_imaging.stages.pipeline
 
 ## Repository structure
 
@@ -22,13 +56,13 @@ LOFAR-solar-imaging/
 
 ## Pipeline entrypoints
 
-The current shell pipeline is preserved under `scripts/legacy/`.
-Use one of the wrapper entrypoints from the repo root:
+The pipeline now runs through a Python entrypoint (`lofar_solar_imaging.stages.pipeline`) and keeps shell wrappers for convenience:
 
 - `./pipeline.sh`
 - `./scripts/run_pipeline.sh`
+- `python3 -m lofar_solar_imaging.stages.pipeline`
 
-Both forward to `scripts/legacy/pipeline.sh`.
+Legacy shell implementations remain under `scripts/legacy/` for reference and fallback.
 
 ## Unified pipeline
 
