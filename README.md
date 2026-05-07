@@ -35,6 +35,7 @@ The current orchestration is handled in Python through:
 
 ```bash
 python3 -m lofar_solar_imaging.stages.pipeline
+```
 
 ## Repository structure
 
