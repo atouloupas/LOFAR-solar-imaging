@@ -1,11 +1,11 @@
 # LOFAR Solar Imaging
 
-LOFAR Solar Imaging is a processing pipeline for turning LOFAR solar radio observations into calibrated and imaged data.
+**LOFAR Solar Imaging** is a processing pipeline for turning solar radio observations from the Low-Frequency Array (LOFAR) into calibrated data and clean images.
 
 The repository provides tools for:
 
 - preparing LOFAR Measurement Sets,
-- averaging and merging data with DP3,
+- averaging and merging data with the Default Preprocessing Pipeline (DP3),
 - calibrating solar observations using calibrator solutions,
 - running WSClean imaging,
 - producing FITS and plot outputs,
